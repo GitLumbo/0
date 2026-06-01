@@ -1,0 +1,1094 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Silesia Zstd14h15 FPGA Kernel Summary</title>
+  <style>
+    :root {
+      --bg: #f6f5f1;
+      --panel: #ffffff;
+      --ink: #202124;
+      --muted: #6f7378;
+      --line: #d9d6cc;
+      --sw: #2f5f8f;
+      --fpga: #b45f3a;
+      --good: #177a5b;
+      --bad: #a33d3d;
+      --accent: #6d5bd0;
+      --shadow: 0 10px 28px rgba(31, 35, 40, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    .shell {
+      width: min(1480px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 24px 0 36px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 20px;
+      padding: 10px 0 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(24px, 4vw, 42px);
+      line-height: 1.05;
+      font-weight: 760;
+    }
+
+    .subhead {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .legend {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      display: inline-block;
+    }
+
+    .dot.sw {
+      background: var(--sw);
+    }
+
+    .dot.fpga {
+      background: var(--fpga);
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+      margin: 18px 0;
+    }
+
+    .metric {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      min-height: 96px;
+      box-shadow: var(--shadow);
+      animation: fade-up 560ms ease both;
+      transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+    }
+
+    .metric:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 16px 34px rgba(31, 35, 40, 0.12);
+      border-color: #c8c2b6;
+    }
+
+    .metric .label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 680;
+      text-transform: uppercase;
+    }
+
+    .metric .value {
+      margin-top: 10px;
+      font-size: clamp(20px, 2.5vw, 31px);
+      font-weight: 780;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .metric .note {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric.good .value {
+      color: var(--good);
+    }
+
+    .metric.bad .value {
+      color: var(--bad);
+    }
+
+    .controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin: 0 0 14px;
+      flex-wrap: wrap;
+    }
+
+    .segmented {
+      display: inline-flex;
+      gap: 2px;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ebe7dc;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .segmented button,
+    .ghost-button {
+      border: 0;
+      border-radius: 6px;
+      min-height: 34px;
+      padding: 0 12px;
+      color: #3d4248;
+      background: transparent;
+      cursor: pointer;
+      transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+    }
+
+    .segmented button:hover,
+    .ghost-button:hover {
+      transform: translateY(-1px);
+    }
+
+    .segmented button.active {
+      color: #fff;
+      background: var(--accent);
+      box-shadow: 0 6px 14px rgba(109, 91, 208, 0.25);
+    }
+
+    .ghost-button {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(420px, 0.75fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      animation: fade-up 620ms ease both;
+    }
+
+    .panel h2 {
+      margin: 0;
+      padding: 14px 16px 0;
+      font-size: 17px;
+      line-height: 1.2;
+    }
+
+    .panel .caption {
+      padding: 4px 16px 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .chart-wrap {
+      width: 100%;
+      overflow-x: auto;
+      padding: 8px 12px 14px;
+    }
+
+    svg.chart {
+      display: block;
+      width: 100%;
+      min-width: 780px;
+      height: auto;
+    }
+
+    .axis text,
+    .tick-label,
+    .bar-label,
+    .delta-label {
+      fill: #53575b;
+      font-size: 11px;
+    }
+
+    .grid-line {
+      stroke: #ebe7dc;
+      stroke-width: 1;
+    }
+
+    .axis-line {
+      stroke: #b9b5aa;
+      stroke-width: 1;
+    }
+
+    .chart-title {
+      fill: var(--ink);
+      font-size: 13px;
+      font-weight: 720;
+    }
+
+    .chart-bar {
+      cursor: pointer;
+      transition: opacity 160ms ease, filter 160ms ease;
+    }
+
+    .chart-bar:hover,
+    .chart-bar.is-active {
+      opacity: 1;
+      filter: drop-shadow(0 5px 8px rgba(31, 35, 40, 0.28));
+    }
+
+    svg.has-active .chart-bar:not(.is-active) {
+      opacity: 0.32;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      padding: 0 0 4px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #ece8df;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    th:first-child,
+    td:first-child {
+      text-align: left;
+      font-weight: 680;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: #fbfaf7;
+      color: #50545a;
+      font-size: 11px;
+      text-transform: uppercase;
+      z-index: 1;
+    }
+
+    tr.total {
+      background: #f8f3e8;
+      font-weight: 760;
+    }
+
+    tbody tr {
+      transition: background 140ms ease;
+    }
+
+    tbody tr:not(.total):hover,
+    tbody tr.is-active {
+      background: #f4f1e8;
+    }
+
+    .delta-good {
+      color: var(--good);
+      font-weight: 720;
+    }
+
+    .delta-bad {
+      color: var(--bad);
+      font-weight: 720;
+    }
+
+    .tooltip {
+      position: fixed;
+      z-index: 20;
+      pointer-events: none;
+      transform: translate(12px, 12px);
+      min-width: 190px;
+      max-width: 280px;
+      padding: 10px 12px;
+      border: 1px solid rgba(32, 33, 36, 0.14);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.96);
+      color: var(--ink);
+      box-shadow: 0 16px 40px rgba(31, 35, 40, 0.18);
+      opacity: 0;
+      transition: opacity 120ms ease;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .tooltip.visible {
+      opacity: 1;
+    }
+
+    .tooltip strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+
+    @keyframes fade-up {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (max-width: 1100px) {
+      .metrics {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .shell {
+        width: min(100vw - 20px, 1480px);
+        padding-top: 10px;
+      }
+
+      header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .metric {
+        min-height: 84px;
+      }
+
+      th,
+      td {
+        padding: 8px 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <h1>Silesia Zstd14h15 Kernel Summary</h1>
+        <div class="subhead">FPGA와 Zstd SW 모두 WINDOW_LOG=14, HASH_TABLE_LOG=15로 맞춘 level 3 비교 · FPGA 속도는 kernel-only 기준</div>
+      </div>
+      <div class="legend" aria-label="chart legend">
+        <span><i class="dot sw"></i>SW zstd14h15</span>
+        <span><i class="dot fpga"></i>FPGA kernel_wall</span>
+      </div>
+    </header>
+
+    <section class="metrics" id="metrics"></section>
+
+    <section class="controls" aria-label="chart controls">
+      <div class="segmented" id="sortControls" role="group" aria-label="sort order">
+        <button type="button" class="active" data-sort="original">Corpus</button>
+        <button type="button" data-sort="speed">Speed Ratio</button>
+        <button type="button" data-sort="delta">Size Delta</button>
+        <button type="button" data-sort="ratio">FPGA Ratio</button>
+      </div>
+      <button type="button" class="ghost-button" id="replayButton">Replay</button>
+    </section>
+
+    <section class="grid">
+      <article class="panel">
+        <h2>압축 속도</h2>
+        <div class="caption">MB/s, 파일별 SW zstd와 FPGA kernel_wall 비교</div>
+        <div class="chart-wrap"><svg id="speedChart" class="chart" viewBox="0 0 980 390" role="img"></svg></div>
+      </article>
+
+      <article class="panel">
+        <h2>요약 테이블</h2>
+        <div class="caption">`TOTAL_WEIGHTED` 포함</div>
+        <div class="table-wrap">
+          <table id="summaryTable"></table>
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>압축률</h2>
+        <div class="caption">낮을수록 좋음</div>
+        <div class="chart-wrap"><svg id="ratioChart" class="chart" viewBox="0 0 980 370" role="img"></svg></div>
+      </article>
+
+      <article class="panel">
+        <h2>Size Delta</h2>
+        <div class="caption">FPGA compressed size vs SW, 음수는 FPGA가 더 작음</div>
+        <div class="chart-wrap"><svg id="deltaChart" class="chart" viewBox="0 0 760 420" role="img"></svg></div>
+      </article>
+    </section>
+  </main>
+
+  <div class="tooltip" id="tooltip" role="status" aria-live="polite"></div>
+
+  <script id="csvData" type="text/plain">filename,original_size,sw_codec,sw_comp_mbps,sw_compressed_size,sw_ratio_pct,fpga_compressed_size,fpga_ratio_pct,fpga_kernel_event_mbps,fpga_kernel_wall_mbps,fpga_calls,fpga_kernel_event_ms_total,fpga_kernel_event_ms_per_call,fpga_kernel_wall_ms_total,fpga_kernel_wall_ms_per_call,fpga_kernel_event_vs_sw_speed_x,fpga_kernel_wall_vs_sw_speed_x,fpga_size_delta_pct
+mozilla,51220480,zstd 1.5.7 -d14 -H15 -3,386.08,20885583,40.78,20708601,40.43,211.80,211.75,3,725.52,241.84,725.68,241.89,0.55,0.55,-0.85
+sao,7251944,zstd 1.5.7 -d14 -H15 -3,269.49,6087542,83.94,5509201,75.97,210.19,210.05,3,103.50,34.50,103.58,34.53,0.78,0.78,-9.50
+mr,9970564,zstd 1.5.7 -d14 -H15 -3,309.85,3792645,38.04,3677841,36.89,211.82,211.69,3,141.21,47.07,141.30,47.10,0.68,0.68,-3.03
+nci,33553445,zstd 1.5.7 -d14 -H15 -3,734.89,3760349,11.21,4318294,12.87,212.82,212.75,3,472.99,157.66,473.14,157.71,0.29,0.29,14.84
+x-ray,8474240,zstd 1.5.7 -d14 -H15 -3,458.89,6726580,79.38,6458011,76.21,210.32,210.15,3,120.88,40.29,120.97,40.32,0.46,0.46,-3.99
+webster,41458703,zstd 1.5.7 -d14 -H15 -3,303.42,15008671,36.20,14633680,35.30,211.78,211.75,3,587.28,195.76,587.38,195.79,0.70,0.70,-2.50
+xml,5345280,zstd 1.5.7 -d14 -H15 -3,552.76,953722,17.84,1081223,20.23,211.17,210.92,3,75.94,25.31,76.03,25.34,0.38,0.38,13.37
+ooffice,6152192,zstd 1.5.7 -d14 -H15 -3,243.96,3508751,57.03,3378738,54.92,210.23,210.03,3,87.79,29.26,87.88,29.29,0.86,0.86,-3.71
+reymont,6627202,zstd 1.5.7 -d14 -H15 -3,239.34,2373985,35.82,2345796,35.40,210.87,210.69,3,94.28,31.43,94.36,31.45,0.88,0.88,-1.19
+osdb,10085684,zstd 1.5.7 -d14 -H15 -3,312.70,5638018,55.90,4530892,44.92,210.73,210.61,3,143.59,47.86,143.66,47.89,0.67,0.67,-19.64
+dickens,10192446,zstd 1.5.7 -d14 -H15 -3,246.88,4555433,44.69,4419940,43.36,210.92,210.81,3,144.97,48.32,145.05,48.35,0.85,0.85,-2.97
+samba,21606400,zstd 1.5.7 -d14 -H15 -3,427.83,6505513,30.11,6279959,29.07,212.05,211.95,3,305.69,101.90,305.82,101.94,0.50,0.50,-3.47
+TOTAL_WEIGHTED,211938580,zstd 1.5.7 -d14 -H15 -3,365.96,79796792,37.65,77342176,36.49,211.68,211.60,36,3003.64,83.43,3004.84,83.47,0.58,0.58,-3.08</script>
+
+  <script>
+    const ns = 'http://www.w3.org/2000/svg';
+    const css = getComputedStyle(document.documentElement);
+    const colors = {
+      sw: css.getPropertyValue('--sw').trim(),
+      fpga: css.getPropertyValue('--fpga').trim(),
+      good: css.getPropertyValue('--good').trim(),
+      bad: css.getPropertyValue('--bad').trim(),
+      accent: css.getPropertyValue('--accent').trim(),
+      grid: '#ebe7dc',
+      text: '#3f4348'
+    };
+
+    function parseCsv(text) {
+      const lines = text.trim().split(/\r?\n/);
+      const headers = lines.shift().split(',');
+      return lines.map(line => {
+        const values = line.split(',');
+        const row = {};
+        headers.forEach((header, index) => {
+          const value = values[index];
+          const number = Number(value);
+          row[header] = value !== '' && !Number.isNaN(number) ? number : value;
+        });
+        return row;
+      });
+    }
+
+    const data = parseCsv(document.getElementById('csvData').textContent);
+    const total = data.find(d => d.filename === 'TOTAL_WEIGHTED');
+    const files = data.filter(d => d.filename !== 'TOTAL_WEIGHTED');
+
+    function fmt(value, digits = 2) {
+      return Number(value).toLocaleString(undefined, {
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits
+      });
+    }
+
+    function intFmt(value) {
+      return Number(value).toLocaleString();
+    }
+
+    function metric(label, value, note, tone = '') {
+      return `<div class="metric ${tone}">
+        <div class="label">${label}</div>
+        <div class="value">${value}</div>
+        <div class="note">${note}</div>
+      </div>`;
+    }
+
+    document.getElementById('metrics').innerHTML = [
+      metric('SW Speed', `${fmt(total.sw_comp_mbps)} MB/s`, 'zstd14h15 -3'),
+      metric('FPGA Kernel', `${fmt(total.fpga_kernel_wall_mbps)} MB/s`, 'kernel_wall'),
+      metric('Speed Ratio', `${fmt(total.fpga_kernel_wall_vs_sw_speed_x)}x`, 'FPGA / SW', total.fpga_kernel_wall_vs_sw_speed_x >= 1 ? 'good' : 'bad'),
+      metric('SW Ratio', `${fmt(total.sw_ratio_pct)}%`, 'compressed / original'),
+      metric('FPGA Ratio', `${fmt(total.fpga_ratio_pct)}%`, 'compressed / original', total.fpga_ratio_pct <= total.sw_ratio_pct ? 'good' : 'bad'),
+      metric('Size Delta', `${fmt(total.fpga_size_delta_pct)}%`, 'FPGA vs SW', total.fpga_size_delta_pct <= 0 ? 'good' : 'bad')
+    ].join('');
+
+    function svgEl(tag, attrs = {}, text = '') {
+      const el = document.createElementNS(ns, tag);
+      Object.entries(attrs).forEach(([key, value]) => el.setAttribute(key, value));
+      if (text) el.textContent = text;
+      return el;
+    }
+
+    function clear(svg) {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+    }
+
+    function addText(svg, x, y, text, attrs = {}) {
+      svg.appendChild(svgEl('text', { x, y, ...attrs }, text));
+    }
+
+    function addGrid(svg, x, y, w, h, maxValue, ticks, suffix = '') {
+      for (let i = 0; i <= ticks; i++) {
+        const value = maxValue * i / ticks;
+        const px = x + (w * i / ticks);
+        svg.appendChild(svgEl('line', {
+          x1: px, y1: y, x2: px, y2: y + h, class: 'grid-line'
+        }));
+        addText(svg, px, y + h + 22, `${Math.round(value)}${suffix}`, {
+          class: 'tick-label', 'text-anchor': 'middle'
+        });
+      }
+      svg.appendChild(svgEl('line', {
+        x1: x, y1: y + h, x2: x + w, y2: y + h, class: 'axis-line'
+      }));
+    }
+
+    function drawSpeedChart() {
+      const svg = document.getElementById('speedChart');
+      clear(svg);
+      const width = 980;
+      const height = 390;
+      const margin = { top: 28, right: 22, bottom: 86, left: 58 };
+      const chartW = width - margin.left - margin.right;
+      const chartH = height - margin.top - margin.bottom;
+      const max = Math.ceil(Math.max(...files.map(d => d.sw_comp_mbps), ...files.map(d => d.fpga_kernel_wall_mbps)) / 100) * 100;
+      addGrid(svg, margin.left, margin.top, chartW, chartH, max, 5);
+
+      const groupW = chartW / files.length;
+      const barW = Math.max(10, groupW * 0.28);
+      files.forEach((d, i) => {
+        const cx = margin.left + i * groupW + groupW / 2;
+        const swH = chartH * d.sw_comp_mbps / max;
+        const fpgaH = chartH * d.fpga_kernel_wall_mbps / max;
+        const sw = svgEl('rect', {
+          x: cx - barW - 2,
+          y: margin.top + chartH - swH,
+          width: barW,
+          height: swH,
+          fill: colors.sw,
+          rx: 2
+        });
+        sw.appendChild(svgEl('title', {}, `${d.filename} SW ${fmt(d.sw_comp_mbps)} MB/s`));
+        svg.appendChild(sw);
+        const fpga = svgEl('rect', {
+          x: cx + 2,
+          y: margin.top + chartH - fpgaH,
+          width: barW,
+          height: fpgaH,
+          fill: colors.fpga,
+          rx: 2
+        });
+        fpga.appendChild(svgEl('title', {}, `${d.filename} FPGA ${fmt(d.fpga_kernel_wall_mbps)} MB/s`));
+        svg.appendChild(fpga);
+        addText(svg, cx, margin.top + chartH + 34, d.filename, {
+          class: 'tick-label',
+          'text-anchor': 'end',
+          transform: `rotate(-45 ${cx} ${margin.top + chartH + 34})`
+        });
+      });
+      addText(svg, margin.left, 18, 'Compression throughput (MB/s)', { class: 'chart-title' });
+    }
+
+    function drawRatioChart() {
+      const svg = document.getElementById('ratioChart');
+      clear(svg);
+      const width = 980;
+      const height = 370;
+      const margin = { top: 28, right: 22, bottom: 86, left: 58 };
+      const chartW = width - margin.left - margin.right;
+      const chartH = height - margin.top - margin.bottom;
+      const max = 90;
+      addGrid(svg, margin.left, margin.top, chartW, chartH, max, 3, '%');
+
+      const groupW = chartW / files.length;
+      const barW = Math.max(10, groupW * 0.28);
+      files.forEach((d, i) => {
+        const cx = margin.left + i * groupW + groupW / 2;
+        const swH = chartH * d.sw_ratio_pct / max;
+        const fpgaH = chartH * d.fpga_ratio_pct / max;
+        const sw = svgEl('rect', {
+          x: cx - barW - 2,
+          y: margin.top + chartH - swH,
+          width: barW,
+          height: swH,
+          fill: colors.sw,
+          rx: 2
+        });
+        sw.appendChild(svgEl('title', {}, `${d.filename} SW ratio ${fmt(d.sw_ratio_pct)}%`));
+        svg.appendChild(sw);
+        const fpga = svgEl('rect', {
+          x: cx + 2,
+          y: margin.top + chartH - fpgaH,
+          width: barW,
+          height: fpgaH,
+          fill: colors.fpga,
+          rx: 2
+        });
+        fpga.appendChild(svgEl('title', {}, `${d.filename} FPGA ratio ${fmt(d.fpga_ratio_pct)}%`));
+        svg.appendChild(fpga);
+        addText(svg, cx, margin.top + chartH + 34, d.filename, {
+          class: 'tick-label',
+          'text-anchor': 'end',
+          transform: `rotate(-45 ${cx} ${margin.top + chartH + 34})`
+        });
+      });
+      addText(svg, margin.left, 18, 'Compression ratio (%)', { class: 'chart-title' });
+    }
+
+    function drawDeltaChart() {
+      const svg = document.getElementById('deltaChart');
+      clear(svg);
+      const width = 760;
+      const height = 420;
+      const margin = { top: 26, right: 74, bottom: 32, left: 94 };
+      const chartW = width - margin.left - margin.right;
+      const chartH = height - margin.top - margin.bottom;
+      const min = Math.min(...files.map(d => d.fpga_size_delta_pct), -20);
+      const max = Math.max(...files.map(d => d.fpga_size_delta_pct), 16);
+      const scale = value => margin.left + ((value - min) / (max - min)) * chartW;
+      const zero = scale(0);
+      svg.appendChild(svgEl('line', { x1: zero, y1: margin.top, x2: zero, y2: margin.top + chartH, class: 'axis-line' }));
+
+      [-20, -10, 0, 10].forEach(tick => {
+        const x = scale(tick);
+        svg.appendChild(svgEl('line', { x1: x, y1: margin.top, x2: x, y2: margin.top + chartH, class: 'grid-line' }));
+        addText(svg, x, margin.top + chartH + 22, `${tick}%`, { class: 'tick-label', 'text-anchor': 'middle' });
+      });
+
+      const rowH = chartH / files.length;
+      files.forEach((d, i) => {
+        const y = margin.top + i * rowH + rowH * 0.22;
+        const h = rowH * 0.56;
+        const x = d.fpga_size_delta_pct < 0 ? scale(d.fpga_size_delta_pct) : zero;
+        const w = Math.abs(scale(d.fpga_size_delta_pct) - zero);
+        const bar = svgEl('rect', {
+          x,
+          y,
+          width: w,
+          height: h,
+          fill: d.fpga_size_delta_pct <= 0 ? colors.good : colors.bad,
+          rx: 2
+        });
+        bar.appendChild(svgEl('title', {}, `${d.filename} ${fmt(d.fpga_size_delta_pct)}%`));
+        svg.appendChild(bar);
+        addText(svg, margin.left - 12, y + h * 0.72, d.filename, {
+          class: 'tick-label',
+          'text-anchor': 'end'
+        });
+        addText(svg, d.fpga_size_delta_pct < 0 ? x - 6 : x + w + 6, y + h * 0.72, `${fmt(d.fpga_size_delta_pct)}%`, {
+          class: 'delta-label',
+          'text-anchor': d.fpga_size_delta_pct < 0 ? 'end' : 'start'
+        });
+      });
+      addText(svg, margin.left, 18, 'FPGA size delta vs SW (%)', { class: 'chart-title' });
+    }
+
+    function drawTable() {
+      const table = document.getElementById('summaryTable');
+      const rows = [...files, total];
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>file</th>
+            <th>SW MB/s</th>
+            <th>FPGA MB/s</th>
+            <th>speed x</th>
+            <th>SW ratio</th>
+            <th>FPGA ratio</th>
+            <th>delta</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(row => `
+            <tr class="${row.filename === 'TOTAL_WEIGHTED' ? 'total' : ''}">
+              <td>${row.filename}</td>
+              <td>${fmt(row.sw_comp_mbps)}</td>
+              <td>${fmt(row.fpga_kernel_wall_mbps)}</td>
+              <td>${fmt(row.fpga_kernel_wall_vs_sw_speed_x)}x</td>
+              <td>${fmt(row.sw_ratio_pct)}%</td>
+              <td>${fmt(row.fpga_ratio_pct)}%</td>
+              <td class="${row.fpga_size_delta_pct <= 0 ? 'delta-good' : 'delta-bad'}">${fmt(row.fpga_size_delta_pct)}%</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      `;
+    }
+
+    (function interactiveDashboard() {
+      let currentSort = 'original';
+      let currentRows = [...files];
+      const tooltip = document.getElementById('tooltip');
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function animatedMetric(label, value, suffix, note, tone = '') {
+        return `<div class="metric ${tone}">
+          <div class="label">${label}</div>
+          <div class="value"><span class="count" data-value="${value}">0</span>${suffix}</div>
+          <div class="note">${note}</div>
+        </div>`;
+      }
+
+      function renderMetrics() {
+        document.getElementById('metrics').innerHTML = [
+          animatedMetric('SW Speed', total.sw_comp_mbps, ' MB/s', 'zstd14h15 -3'),
+          animatedMetric('FPGA Kernel', total.fpga_kernel_wall_mbps, ' MB/s', 'kernel_wall'),
+          animatedMetric('Speed Ratio', total.fpga_kernel_wall_vs_sw_speed_x, 'x', 'FPGA / SW', total.fpga_kernel_wall_vs_sw_speed_x >= 1 ? 'good' : 'bad'),
+          animatedMetric('SW Ratio', total.sw_ratio_pct, '%', 'compressed / original'),
+          animatedMetric('FPGA Ratio', total.fpga_ratio_pct, '%', 'compressed / original', total.fpga_ratio_pct <= total.sw_ratio_pct ? 'good' : 'bad'),
+          animatedMetric('Size Delta', total.fpga_size_delta_pct, '%', 'FPGA vs SW', total.fpga_size_delta_pct <= 0 ? 'good' : 'bad')
+        ].join('');
+        animateCounts();
+      }
+
+      function animateCounts() {
+        document.querySelectorAll('.count').forEach(node => {
+          const target = Number(node.dataset.value);
+          const start = performance.now();
+          const duration = 760;
+          const tick = now => {
+            const t = Math.min(1, (now - start) / duration);
+            const eased = 1 - Math.pow(1 - t, 3);
+            node.textContent = fmt(target * eased);
+            if (t < 1) requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        });
+      }
+
+      function clearInteractive(svg) {
+        clear(svg);
+        svg.classList.remove('has-active');
+      }
+
+      function animateRect(el, attrs, duration = 660) {
+        const from = {};
+        Object.keys(attrs).forEach(key => {
+          from[key] = Number(el.getAttribute(key));
+        });
+        const start = performance.now();
+        const tick = now => {
+          const t = Math.min(1, (now - start) / duration);
+          const eased = 1 - Math.pow(1 - t, 3);
+          Object.entries(attrs).forEach(([key, value]) => {
+            el.setAttribute(key, from[key] + (value - from[key]) * eased);
+          });
+          if (t < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }
+
+      function sortRows(mode) {
+        const rows = [...files];
+        if (mode === 'speed') {
+          rows.sort((a, b) => b.fpga_kernel_wall_vs_sw_speed_x - a.fpga_kernel_wall_vs_sw_speed_x);
+        } else if (mode === 'delta') {
+          rows.sort((a, b) => a.fpga_size_delta_pct - b.fpga_size_delta_pct);
+        } else if (mode === 'ratio') {
+          rows.sort((a, b) => a.fpga_ratio_pct - b.fpga_ratio_pct);
+        }
+        return rows;
+      }
+
+      function tooltipHtml(row) {
+        return `<strong>${escapeHtml(row.filename)}</strong>
+          SW ${fmt(row.sw_comp_mbps)} MB/s · FPGA ${fmt(row.fpga_kernel_wall_mbps)} MB/s<br>
+          speed ${fmt(row.fpga_kernel_wall_vs_sw_speed_x)}x · delta ${fmt(row.fpga_size_delta_pct)}%<br>
+          ratio SW ${fmt(row.sw_ratio_pct)}% / FPGA ${fmt(row.fpga_ratio_pct)}%`;
+      }
+
+      function moveTooltip(event) {
+        tooltip.style.left = `${event.clientX}px`;
+        tooltip.style.top = `${event.clientY}px`;
+      }
+
+      function showTooltip(event, row) {
+        tooltip.innerHTML = tooltipHtml(row);
+        tooltip.classList.add('visible');
+        moveTooltip(event);
+      }
+
+      function hideTooltip() {
+        tooltip.classList.remove('visible');
+        setActiveFile(null);
+      }
+
+      function setActiveFile(file) {
+        document.querySelectorAll('[data-file]').forEach(el => {
+          el.classList.toggle('is-active', Boolean(file) && el.dataset.file === file);
+        });
+        document.querySelectorAll('svg.chart').forEach(svg => {
+          svg.classList.toggle('has-active', Boolean(file));
+        });
+      }
+
+      function wireHover(el, row) {
+        el.dataset.file = row.filename;
+        el.addEventListener('mouseenter', event => {
+          setActiveFile(row.filename);
+          showTooltip(event, row);
+        });
+        el.addEventListener('mousemove', moveTooltip);
+        el.addEventListener('mouseleave', hideTooltip);
+      }
+
+      function drawInteractiveSpeedChart(rows) {
+        const svg = document.getElementById('speedChart');
+        clearInteractive(svg);
+        const width = 980;
+        const height = 390;
+        const margin = { top: 28, right: 22, bottom: 86, left: 58 };
+        const chartW = width - margin.left - margin.right;
+        const chartH = height - margin.top - margin.bottom;
+        const max = Math.ceil(Math.max(...rows.map(d => d.sw_comp_mbps), ...rows.map(d => d.fpga_kernel_wall_mbps)) / 100) * 100;
+        addGrid(svg, margin.left, margin.top, chartW, chartH, max, 5);
+
+        const groupW = chartW / rows.length;
+        const barW = Math.max(10, groupW * 0.28);
+        rows.forEach((d, i) => {
+          const cx = margin.left + i * groupW + groupW / 2;
+          const baseY = margin.top + chartH;
+          const swH = chartH * d.sw_comp_mbps / max;
+          const fpgaH = chartH * d.fpga_kernel_wall_mbps / max;
+          const sw = svgEl('rect', {
+            class: 'chart-bar',
+            x: cx - barW - 2,
+            y: baseY,
+            width: barW,
+            height: 0,
+            fill: colors.sw,
+            rx: 2
+          });
+          wireHover(sw, d);
+          svg.appendChild(sw);
+          animateRect(sw, { y: baseY - swH, height: swH });
+
+          const fpga = svgEl('rect', {
+            class: 'chart-bar',
+            x: cx + 2,
+            y: baseY,
+            width: barW,
+            height: 0,
+            fill: colors.fpga,
+            rx: 2
+          });
+          wireHover(fpga, d);
+          svg.appendChild(fpga);
+          animateRect(fpga, { y: baseY - fpgaH, height: fpgaH });
+
+          addText(svg, cx, baseY + 34, d.filename, {
+            class: 'tick-label',
+            'text-anchor': 'end',
+            transform: `rotate(-45 ${cx} ${baseY + 34})`
+          });
+        });
+        addText(svg, margin.left, 18, 'Compression throughput (MB/s)', { class: 'chart-title' });
+      }
+
+      function drawInteractiveRatioChart(rows) {
+        const svg = document.getElementById('ratioChart');
+        clearInteractive(svg);
+        const width = 980;
+        const height = 370;
+        const margin = { top: 28, right: 22, bottom: 86, left: 58 };
+        const chartW = width - margin.left - margin.right;
+        const chartH = height - margin.top - margin.bottom;
+        const max = 90;
+        addGrid(svg, margin.left, margin.top, chartW, chartH, max, 3, '%');
+
+        const groupW = chartW / rows.length;
+        const barW = Math.max(10, groupW * 0.28);
+        rows.forEach((d, i) => {
+          const cx = margin.left + i * groupW + groupW / 2;
+          const baseY = margin.top + chartH;
+          const swH = chartH * d.sw_ratio_pct / max;
+          const fpgaH = chartH * d.fpga_ratio_pct / max;
+          const sw = svgEl('rect', {
+            class: 'chart-bar',
+            x: cx - barW - 2,
+            y: baseY,
+            width: barW,
+            height: 0,
+            fill: colors.sw,
+            rx: 2
+          });
+          wireHover(sw, d);
+          svg.appendChild(sw);
+          animateRect(sw, { y: baseY - swH, height: swH });
+
+          const fpga = svgEl('rect', {
+            class: 'chart-bar',
+            x: cx + 2,
+            y: baseY,
+            width: barW,
+            height: 0,
+            fill: colors.fpga,
+            rx: 2
+          });
+          wireHover(fpga, d);
+          svg.appendChild(fpga);
+          animateRect(fpga, { y: baseY - fpgaH, height: fpgaH });
+
+          addText(svg, cx, baseY + 34, d.filename, {
+            class: 'tick-label',
+            'text-anchor': 'end',
+            transform: `rotate(-45 ${cx} ${baseY + 34})`
+          });
+        });
+        addText(svg, margin.left, 18, 'Compression ratio (%)', { class: 'chart-title' });
+      }
+
+      function drawInteractiveDeltaChart(rows) {
+        const svg = document.getElementById('deltaChart');
+        clearInteractive(svg);
+        const width = 760;
+        const height = 420;
+        const margin = { top: 26, right: 74, bottom: 32, left: 94 };
+        const chartW = width - margin.left - margin.right;
+        const chartH = height - margin.top - margin.bottom;
+        const min = Math.min(...rows.map(d => d.fpga_size_delta_pct), -20);
+        const max = Math.max(...rows.map(d => d.fpga_size_delta_pct), 16);
+        const scale = value => margin.left + ((value - min) / (max - min)) * chartW;
+        const zero = scale(0);
+        svg.appendChild(svgEl('line', { x1: zero, y1: margin.top, x2: zero, y2: margin.top + chartH, class: 'axis-line' }));
+
+        [-20, -10, 0, 10].forEach(tick => {
+          const x = scale(tick);
+          svg.appendChild(svgEl('line', { x1: x, y1: margin.top, x2: x, y2: margin.top + chartH, class: 'grid-line' }));
+          addText(svg, x, margin.top + chartH + 22, `${tick}%`, { class: 'tick-label', 'text-anchor': 'middle' });
+        });
+
+        const rowH = chartH / rows.length;
+        rows.forEach((d, i) => {
+          const y = margin.top + i * rowH + rowH * 0.22;
+          const h = rowH * 0.56;
+          const targetX = d.fpga_size_delta_pct < 0 ? scale(d.fpga_size_delta_pct) : zero;
+          const targetW = Math.abs(scale(d.fpga_size_delta_pct) - zero);
+          const bar = svgEl('rect', {
+            class: 'chart-bar',
+            x: zero,
+            y,
+            width: 0,
+            height: h,
+            fill: d.fpga_size_delta_pct <= 0 ? colors.good : colors.bad,
+            rx: 2
+          });
+          wireHover(bar, d);
+          svg.appendChild(bar);
+          animateRect(bar, { x: targetX, width: targetW });
+          addText(svg, margin.left - 12, y + h * 0.72, d.filename, {
+            class: 'tick-label',
+            'text-anchor': 'end'
+          });
+          addText(svg, d.fpga_size_delta_pct < 0 ? targetX - 6 : targetX + targetW + 6, y + h * 0.72, `${fmt(d.fpga_size_delta_pct)}%`, {
+            class: 'delta-label',
+            'text-anchor': d.fpga_size_delta_pct < 0 ? 'end' : 'start'
+          });
+        });
+        addText(svg, margin.left, 18, 'FPGA size delta vs SW (%)', { class: 'chart-title' });
+      }
+
+      function drawInteractiveTable(rows) {
+        const table = document.getElementById('summaryTable');
+        const tableRows = [...rows, total];
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th>file</th>
+              <th>SW MB/s</th>
+              <th>FPGA MB/s</th>
+              <th>speed x</th>
+              <th>SW ratio</th>
+              <th>FPGA ratio</th>
+              <th>delta</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows.map(row => `
+              <tr class="${row.filename === 'TOTAL_WEIGHTED' ? 'total' : ''}" data-file="${escapeHtml(row.filename)}">
+                <td>${escapeHtml(row.filename)}</td>
+                <td>${fmt(row.sw_comp_mbps)}</td>
+                <td>${fmt(row.fpga_kernel_wall_mbps)}</td>
+                <td>${fmt(row.fpga_kernel_wall_vs_sw_speed_x)}x</td>
+                <td>${fmt(row.sw_ratio_pct)}%</td>
+                <td>${fmt(row.fpga_ratio_pct)}%</td>
+                <td class="${row.fpga_size_delta_pct <= 0 ? 'delta-good' : 'delta-bad'}">${fmt(row.fpga_size_delta_pct)}%</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        `;
+        table.querySelectorAll('tbody tr:not(.total)').forEach(row => {
+          const item = files.find(d => d.filename === row.dataset.file);
+          if (!item) return;
+          row.addEventListener('mouseenter', event => {
+            setActiveFile(item.filename);
+            showTooltip(event, item);
+          });
+          row.addEventListener('mousemove', moveTooltip);
+          row.addEventListener('mouseleave', hideTooltip);
+        });
+      }
+
+      function renderAll() {
+        currentRows = sortRows(currentSort);
+        drawInteractiveSpeedChart(currentRows);
+        drawInteractiveRatioChart(currentRows);
+        drawInteractiveDeltaChart(currentRows);
+        drawInteractiveTable(currentRows);
+      }
+
+      document.getElementById('sortControls').addEventListener('click', event => {
+        const button = event.target.closest('button[data-sort]');
+        if (!button) return;
+        currentSort = button.dataset.sort;
+        document.querySelectorAll('#sortControls button').forEach(item => {
+          item.classList.toggle('active', item === button);
+        });
+        renderAll();
+      });
+
+      document.getElementById('replayButton').addEventListener('click', renderAll);
+
+      renderMetrics();
+      renderAll();
+    })();
+  </script>
+</body>
+</html>
