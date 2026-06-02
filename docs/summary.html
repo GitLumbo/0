@@ -494,7 +494,7 @@
       </div>
       <div class="source-box">
         <div class="source-label">CSV Source</div>
-        <div class="source-name" id="sourceName">loading</div>
+        <div class="source-name" id="sourceName">No CSV selected</div>
         <div class="source-actions">
           <button class="ghost-button" type="button" id="reloadButton">Reload</button>
           <label class="file-button">
@@ -524,7 +524,7 @@
     </section>
 
     <section class="empty" id="emptyState">
-      CSV를 읽지 못했습니다. 같은 폴더에 summary.csv를 두거나 Load CSV로 파일을 선택하세요.
+      CSV가 지정되지 않았습니다. CSV파일을 불러오세요.
     </section>
 
     <section class="grid" id="dashboard">
@@ -565,9 +565,20 @@
   <div class="tooltip" id="tooltip"></div>
 
   <script>
-    const CSV_PARAM = new URLSearchParams(window.location.search).get('csv');
-    const DEFAULT_CSV = CSV_PARAM || 'summary.csv';
-    const FALLBACK_CSV = 'silesia_zstd14h15_level1_kernel_summary.csv';
+    function decodeUrlToken(value) {
+      try {
+        return decodeURIComponent(String(value || '').replace(/\+/g, ' ')).trim();
+      } catch (error) {
+        return String(value || '').trim();
+      }
+    }
+
+    function csvPathFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      return decodeUrlToken(params.get('csv') || '');
+    }
+
+    const CSV_PARAM = csvPathFromUrl();
 
     const state = {
       rows: [],
@@ -575,7 +586,7 @@
       total: null,
       sort: 'original',
       activeFile: null,
-      source: DEFAULT_CSV
+      source: CSV_PARAM
     };
 
     const els = {
@@ -1098,39 +1109,60 @@
       renderAll();
     }
 
+    function setCsvUrlParam(fileName) {
+      const csvName = decodeUrlToken(fileName);
+      if (!csvName) return;
+      const url = new URL(window.location.href);
+      url.search = '';
+      url.hash = '';
+      url.searchParams.set('csv', csvName);
+      window.history.replaceState(null, '', url);
+    }
+
     async function fetchCsv(path) {
       const response = await fetch(path, { cache: 'no-store' });
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
       return response.text();
     }
 
-    async function loadDefaultCsv() {
-      const candidates = [...new Set([DEFAULT_CSV, FALLBACK_CSV])];
-      els.sourceName.textContent = candidates[0];
-      els.loadStatus.textContent = 'loading';
-
-      for (const candidate of candidates) {
-        try {
-          const text = await fetchCsv(candidate);
-          applyCsv(text, candidate);
-          return;
-        } catch (error) {
-          els.loadStatus.textContent = `${candidate} load failed`;
-        }
+    async function loadCsvFromUrl() {
+      const csvPath = csvPathFromUrl();
+      if (!csvPath) {
+        state.rows = [];
+        state.files = [];
+        state.total = null;
+        state.source = '';
+        els.sourceName.textContent = 'No CSV selected';
+        els.loadStatus.textContent = 'Choose a CSV file or use ?csv=filename.csv';
+        renderAll();
+        return;
       }
 
-      els.sourceName.textContent = 'No CSV loaded';
-      els.loadStatus.textContent = 'Use Load CSV or serve this folder over HTTP';
-      renderAll();
+      els.sourceName.textContent = csvPath;
+      els.loadStatus.textContent = 'loading';
+      try {
+        const text = await fetchCsv(csvPath);
+        applyCsv(text, csvPath);
+      } catch (error) {
+        state.rows = [];
+        state.files = [];
+        state.total = null;
+        state.source = csvPath;
+        els.loadStatus.textContent = `${csvPath} load failed`;
+        renderAll();
+      }
     }
 
-    document.getElementById('reloadButton').addEventListener('click', loadDefaultCsv);
+    document.getElementById('reloadButton').addEventListener('click', loadCsvFromUrl);
 
     document.getElementById('csvPicker').addEventListener('change', event => {
       const file = event.target.files && event.target.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = () => applyCsv(String(reader.result || ''), file.name);
+      reader.onload = () => {
+        setCsvUrlParam(file.name);
+        applyCsv(String(reader.result || ''), file.name);
+      };
       reader.readAsText(file);
     });
 
@@ -1145,7 +1177,7 @@
       renderTable();
     });
 
-    loadDefaultCsv();
+    loadCsvFromUrl();
   </script>
 </body>
 </html>
